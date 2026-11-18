@@ -1,0 +1,112 @@
+/**
+ * Phase 0: Payload-First Security TDD Spec Verification
+ * Verifies the "Dirty Dozen" adversarial payloads against APPVERSE invariants.
+ * Run against Firebase Emulator Suite (`firebase emulators:exec`) when available.
+ */
+
+export const DIRTY_DOZEN_CASES = [
+  {
+    id: 1,
+    name: 'Self-Role Escalation on Create',
+    target: '/users/attackerUid',
+    operation: 'create',
+    payload: {
+      uid: 'attackerUid',
+      username: 'attacker',
+      displayName: 'Attacker',
+      email: 'attacker@example.com',
+      role: 'OWNER',
+      accountStatus: 'ACTIVE',
+      uploadedCount: 0,
+    },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    id: 2,
+    name: 'Self-Role Escalation on Update',
+    target: '/users/attackerUid',
+    operation: 'update',
+    payload: { role: 'OWNER', accountStatus: 'ACTIVE' },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    id: 3,
+    name: 'Admin Marker Injection',
+    target: '/admins/attackerUid',
+    operation: 'create',
+    payload: { uid: 'attackerUid', email: 'attacker@example.com' },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    id: 4,
+    name: 'Unverified Email Upload',
+    target: '/applications/app_unverified',
+    operation: 'create',
+    auth: { uid: 'u1', email_verified: false },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    id: 5,
+    name: 'Pre-Approved Application Bypass',
+    target: '/applications/app_bypass',
+    operation: 'create',
+    payload: { status: 'APPROVED', featured: true, downloadCount: 5000 },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    id: 6,
+    name: 'Developer Self-Approval',
+    target: '/applications/app_pending',
+    operation: 'update',
+    auth: { uid: 'dev1', email_verified: true },
+    payload: { status: 'APPROVED' },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    id: 7,
+    name: 'Shadow Field Injection',
+    target: '/applications/app_shadow',
+    operation: 'create',
+    payload: { isOfficialVerified: true },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    id: 8,
+    name: 'Unapproved Listing Scrape',
+    target: '/applications',
+    operation: 'list',
+    auth: null,
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    id: 9,
+    name: 'Cross-User PII Read',
+    target: '/users/victimUid',
+    operation: 'get',
+    auth: { uid: 'attackerUid', email_verified: true },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    id: 10,
+    name: 'ID Poisoning',
+    target: '/applications/..%2F..%2Fetc%2Fpasswd',
+    operation: 'create',
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    id: 11,
+    name: 'Unapproved Download Telemetry',
+    target: '/downloads/dl_fake',
+    operation: 'create',
+    payload: { appId: 'pending_app_id' },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    id: 12,
+    name: 'Audit Log Tampering',
+    target: '/auditLogs/log_1',
+    operation: 'delete',
+    auth: { uid: 'owner', email: 'elwin.george2010@gmail.com', email_verified: true },
+    expected: 'PERMISSION_DENIED',
+  },
+] as const;

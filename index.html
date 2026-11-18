@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>APPVERSE — Application Publishing & Marketplace</title>
+    <meta name="description" content="Free Android (APK/AAB) and iOS (IPA) application publishing, Owner security review, and marketplace sharing platform." />
+    <meta property="og:title" content="APPVERSE — Application Publishing & Marketplace" />
+    <meta property="og:description" content="Publish, review, and discover Android and iOS applications with verified Owner moderation." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body class="bg-slate-50 text-slate-900 dark:bg-[#090D16] dark:text-slate-100 antialiased selection:bg-blue-600 selection:text-white">
+    <div id="root">
+      <div id="appverse-boot-shell" style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;font-family:'Plus Jakarta Sans',system-ui,sans-serif;text-align:center;">
+        <div style="width:56px;height:56px;border-radius:16px;background:#0f172a;color:#ffffff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px;margin-bottom:16px;">A</div>
+        <h1 style="margin:0;font-size:22px;font-weight:700;color:#0f172a;">APPVERSE</h1>
+        <p id="appverse-boot-msg" style="margin:8px 0 0;font-size:13px;color:#64748b;max-width:440px;line-height:1.5;">Loading application marketplace...</p>
+      </div>
+    </div>
+    <script>
+      window.__APPVERSE_MOUNTED__ = false;
+      setTimeout(function () {
+        if (!window.__APPVERSE_MOUNTED__) {
+          var msg = document.getElementById('appverse-boot-msg');
+          if (msg) {
+            msg.innerHTML = 'If you published raw source files to GitHub Pages, switch <strong>Settings → Pages → Source</strong> to <strong>GitHub Actions</strong> so the included workflow builds and serves the live interface.';
+          }
+        }
+      }, 3500);
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

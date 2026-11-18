@@ -1,0 +1,79 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwnerUser(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isPlatformOwner() {
+      return isVerified() && request.auth.token.email == 'elwin.george2010@gmail.com';
+    }
+
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Unpublished application binary packages: strictly private to submitting developer & Platform Owner
+    match /submissions/{developerId}/{appId}/package/{fileName} {
+      allow read: if isPlatformOwner() || isOwnerUser(developerId);
+      allow create, update: if isVerified() &&
+        isOwnerUser(developerId) &&
+        request.resource.size > 0 &&
+        request.resource.size <= 250 * 1024 * 1024 &&
+        fileName.matches('^.+\\.(apk|aab|ipa)$');
+      allow delete: if isPlatformOwner() || isOwnerUser(developerId);
+    }
+
+    // Publicly approved application binaries (moved or promoted by Owner/Cloud Functions upon approval)
+    match /published/{appId}/{fileName} {
+      allow read: if true;
+      allow write: if isPlatformOwner() &&
+        request.resource.size > 0 &&
+        request.resource.size <= 250 * 1024 * 1024 &&
+        fileName.matches('^.+\\.(apk|aab|ipa)$');
+      allow delete: if isPlatformOwner();
+    }
+
+    // Application icons and screenshots
+    match /submissions/{developerId}/{appId}/icon/{fileName} {
+      allow read: if true;
+      allow write: if isVerified() &&
+        isOwnerUser(developerId) &&
+        request.resource.size > 0 &&
+        request.resource.size <= 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/(png|jpeg|webp)');
+      allow delete: if isPlatformOwner() || isOwnerUser(developerId);
+    }
+
+    match /submissions/{developerId}/{appId}/screenshots/{fileName} {
+      allow read: if true;
+      allow write: if isVerified() &&
+        isOwnerUser(developerId) &&
+        request.resource.size > 0 &&
+        request.resource.size <= 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/(png|jpeg|webp)');
+      allow delete: if isPlatformOwner() || isOwnerUser(developerId);
+    }
+
+    // User profile avatars
+    match /avatars/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() &&
+        isOwnerUser(userId) &&
+        request.resource.size > 0 &&
+        request.resource.size <= 3 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/(png|jpeg|webp)');
+      allow delete: if isPlatformOwner() || isOwnerUser(userId);
+    }
+  }
+}

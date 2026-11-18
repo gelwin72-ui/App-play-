@@ -1,0 +1,12 @@
+import {createRoot} from 'react-dom/client';
+import App from './App.tsx';
+import './index.css';
+
+declare global {
+  interface Window {
+    __APPVERSE_MOUNTED__?: boolean;
+  }
+}
+
+window.__APPVERSE_MOUNTED__ = true;
+createRoot(document.getElementById('root')!).render(<App />);

@@ -1,0 +1,6 @@
+{
+  "name": "APPVERSE",
+  "description": "Free Android (APK/AAB) and iOS (IPA) application publishing, Owner security review, and marketplace sharing platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,641 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Core Security Primitives
+    // -------------------------------------------------------------------------
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'elwin.george2010@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isActiveAccount() {
+      return isSignedIn() && (
+        !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'ACTIVE'
+      );
+    }
+
+    function isOptionalString(data, field, maxLen) {
+      return !(field in data) || (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isOptionalNumber(data, field) {
+      return !(field in data) || (data[field] is number);
+    }
+
+    function isOptionalTimestamp(data, field) {
+      return !(field in data) || (data[field] is timestamp);
+    }
+
+    // -------------------------------------------------------------------------
+    // Entity Validation Blueprints
+    // -------------------------------------------------------------------------
+    function isValidUserAccount(data) {
+      return data.keys().hasAll([
+        'uid', 'username', 'displayName', 'email', 'role', 'accountStatus',
+        'uploadedCount', 'registrationDate', 'lastActivity'
+      ]) &&
+      data.keys().hasOnly([
+        'uid', 'username', 'displayName', 'email', 'role', 'accountStatus',
+        'avatarUrl', 'developerBio', 'supportEmail', 'website', 'uploadedCount',
+        'registrationDate', 'lastActivity'
+      ]) &&
+      isValidId(data.uid) &&
+      data.username is string && data.username.size() >= 2 && data.username.size() <= 40 &&
+      data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+      data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+      data.role in ['USER', 'OWNER'] &&
+      data.accountStatus in ['ACTIVE', 'SUSPENDED'] &&
+      data.uploadedCount is number && data.uploadedCount >= 0 &&
+      data.registrationDate is timestamp &&
+      data.lastActivity is timestamp &&
+      isOptionalString(data, 'avatarUrl', 1000) &&
+      isOptionalString(data, 'developerBio', 600) &&
+      isOptionalString(data, 'supportEmail', 160) &&
+      isOptionalString(data, 'website', 300);
+    }
+
+    function isValidPublicDeveloper(data) {
+      return data.keys().hasAll([
+        'uid', 'username', 'displayName', 'approvedAppCount', 'accountStatus', 'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'uid', 'username', 'displayName', 'bio', 'avatarUrl', 'website',
+        'approvedAppCount', 'accountStatus', 'createdAt'
+      ]) &&
+      isValidId(data.uid) &&
+      data.username is string && data.username.size() >= 2 && data.username.size() <= 40 &&
+      data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+      data.approvedAppCount is number && data.approvedAppCount >= 0 &&
+      data.accountStatus in ['ACTIVE', 'SUSPENDED'] &&
+      data.createdAt is timestamp &&
+      isOptionalString(data, 'bio', 600) &&
+      isOptionalString(data, 'avatarUrl', 1000) &&
+      isOptionalString(data, 'website', 300);
+    }
+
+    function isValidAdminMarker(data) {
+      return data.keys().hasAll(['uid', 'email', 'grantedAt']) &&
+      data.keys().hasOnly(['uid', 'email', 'grantedAt']) &&
+      isValidId(data.uid) &&
+      data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+      data.grantedAt is timestamp;
+    }
+
+    function isValidApplication(data) {
+      return data.keys().hasAll([
+        'appId', 'appName', 'description', 'developerId', 'developerName',
+        'platform', 'fileType', 'fileName', 'fileSizeBytes', 'fileSha256',
+        'fileStoragePath', 'version', 'category', 'isGame', 'status',
+        'uploadDate', 'updatedAt', 'supportContact', 'downloadCount', 'featured'
+      ]) &&
+      data.keys().hasOnly([
+        'appId', 'appName', 'description', 'developerId', 'developerName',
+        'platform', 'fileType', 'fileName', 'fileSizeBytes', 'fileSha256',
+        'fileStoragePath', 'publicDownloadUrl', 'iconStoragePath', 'iconUrl',
+        'screenshots', 'version', 'category', 'isGame', 'status',
+        'uploadDate', 'updatedAt', 'reviewDate', 'reviewerId', 'rejectionReason',
+        'reviewNotes', 'testingChecklist', 'packageInspection', 'privacyPolicyUrl',
+        'supportContact', 'downloadCount', 'featured', 'averageRating', 'ratingCount'
+      ]) &&
+      isValidId(data.appId) &&
+      data.appName is string && data.appName.size() >= 2 && data.appName.size() <= 80 &&
+      data.description is string && data.description.size() >= 10 && data.description.size() <= 4000 &&
+      isValidId(data.developerId) &&
+      data.developerName is string && data.developerName.size() >= 1 && data.developerName.size() <= 80 &&
+      data.platform in ['android', 'ios'] &&
+      data.fileType in ['apk', 'aab', 'ipa'] &&
+      (
+        (data.platform == 'android' && data.fileType in ['apk', 'aab']) ||
+        (data.platform == 'ios' && data.fileType == 'ipa')
+      ) &&
+      data.fileName is string && data.fileName.size() >= 5 && data.fileName.size() <= 200 &&
+      data.fileSizeBytes is number && data.fileSizeBytes > 0 && data.fileSizeBytes <= 262144000 &&
+      data.fileSha256 is string && data.fileSha256.size() >= 16 && data.fileSha256.size() <= 128 &&
+      data.fileStoragePath is string && data.fileStoragePath.size() >= 5 && data.fileStoragePath.size() <= 500 &&
+      data.version is string && data.version.size() >= 1 && data.version.size() <= 32 &&
+      data.category is string && data.category.size() >= 2 && data.category.size() <= 60 &&
+      data.isGame is bool &&
+      data.status in ['PENDING', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'SUSPENDED'] &&
+      data.uploadDate is timestamp &&
+      data.updatedAt is timestamp &&
+      data.supportContact is string && data.supportContact.size() >= 3 && data.supportContact.size() <= 160 &&
+      data.downloadCount is number && data.downloadCount >= 0 &&
+      data.featured is bool &&
+      isOptionalString(data, 'publicDownloadUrl', 1500) &&
+      isOptionalString(data, 'iconStoragePath', 500) &&
+      isOptionalString(data, 'iconUrl', 1500) &&
+      isOptionalTimestamp(data, 'reviewDate') &&
+      isOptionalString(data, 'reviewerId', 128) &&
+      isOptionalString(data, 'rejectionReason', 1000) &&
+      isOptionalString(data, 'reviewNotes', 2000) &&
+      isOptionalString(data, 'privacyPolicyUrl', 500) &&
+      isOptionalNumber(data, 'averageRating') &&
+      isOptionalNumber(data, 'ratingCount') &&
+      (!( 'screenshots' in data ) || (
+        data.screenshots is list &&
+        data.screenshots.size() <= 6 &&
+        (data.screenshots.size() == 0 || (data.screenshots[0] is string && data.screenshots[0].size() <= 1500))
+      )) &&
+      (!( 'testingChecklist' in data ) || data.testingChecklist is map) &&
+      (!( 'packageInspection' in data ) || data.packageInspection is map);
+    }
+
+    function isValidCategory(data) {
+      return data.keys().hasAll(['categoryId', 'name', 'type']) &&
+      data.keys().hasOnly(['categoryId', 'name', 'type', 'description']) &&
+      isValidId(data.categoryId) &&
+      data.name is string && data.name.size() >= 2 && data.name.size() <= 60 &&
+      data.type in ['app', 'game'] &&
+      isOptionalString(data, 'description', 300);
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['notificationId', 'recipientId', 'senderId', 'type', 'title', 'message', 'read', 'createdAt']) &&
+      data.keys().hasOnly(['notificationId', 'recipientId', 'senderId', 'type', 'title', 'message', 'relatedAppId', 'read', 'createdAt']) &&
+      isValidId(data.notificationId) &&
+      data.recipientId is string && data.recipientId.size() >= 2 && data.recipientId.size() <= 128 &&
+      data.senderId is string && data.senderId.size() >= 2 && data.senderId.size() <= 128 &&
+      data.type in ['UPLOAD_RECEIVED', 'SUBMISSION_ALERT', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'SUSPENDED', 'ANNOUNCEMENT', 'SECURITY_ALERT', 'ACCOUNT_UPDATE', 'REPORT_ALERT'] &&
+      data.title is string && data.title.size() >= 2 && data.title.size() <= 140 &&
+      data.message is string && data.message.size() >= 2 && data.message.size() <= 600 &&
+      data.read is bool &&
+      data.createdAt is timestamp &&
+      isOptionalString(data, 'relatedAppId', 128);
+    }
+
+    function isValidReport(data) {
+      return data.keys().hasAll(['reportId', 'appId', 'appName', 'reporterId', 'reason', 'details', 'status', 'createdAt']) &&
+      data.keys().hasOnly(['reportId', 'appId', 'appName', 'reporterId', 'reason', 'details', 'status', 'resolutionNotes', 'createdAt']) &&
+      isValidId(data.reportId) &&
+      isValidId(data.appId) &&
+      data.appName is string && data.appName.size() >= 1 && data.appName.size() <= 80 &&
+      isValidId(data.reporterId) &&
+      data.reason in ['MALWARE', 'COPYRIGHT', 'MISLEADING', 'INAPPROPRIATE', 'BROKEN_BINARY', 'OTHER'] &&
+      data.details is string && data.details.size() >= 5 && data.details.size() <= 1000 &&
+      data.status in ['OPEN', 'INVESTIGATING', 'RESOLVED', 'DISMISSED'] &&
+      data.createdAt is timestamp &&
+      isOptionalString(data, 'resolutionNotes', 1000);
+    }
+
+    function isValidReview(data) {
+      return data.keys().hasAll(['reviewId', 'appId', 'authorId', 'authorName', 'reviewType', 'comment', 'createdAt']) &&
+      data.keys().hasOnly(['reviewId', 'appId', 'authorId', 'authorName', 'reviewType', 'rating', 'comment', 'testDevice', 'testOutcome', 'createdAt']) &&
+      isValidId(data.reviewId) &&
+      isValidId(data.appId) &&
+      isValidId(data.authorId) &&
+      data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 80 &&
+      data.reviewType in ['USER_REVIEW', 'OWNER_TEST'] &&
+      data.comment is string && data.comment.size() >= 2 && data.comment.size() <= 1500 &&
+      data.createdAt is timestamp &&
+      isOptionalNumber(data, 'rating') &&
+      isOptionalString(data, 'testDevice', 120) &&
+      (!( 'testOutcome' in data ) || data.testOutcome in ['PASSED', 'FAILED', 'NEEDS_CHANGES']);
+    }
+
+    function isValidDownloadEvent(data) {
+      return data.keys().hasAll(['downloadId', 'appId', 'appName', 'platform', 'fileType', 'createdAt']) &&
+      data.keys().hasOnly(['downloadId', 'appId', 'appName', 'platform', 'fileType', 'downloaderId', 'createdAt']) &&
+      isValidId(data.downloadId) &&
+      isValidId(data.appId) &&
+      data.appName is string && data.appName.size() >= 1 && data.appName.size() <= 80 &&
+      data.platform in ['android', 'ios'] &&
+      data.fileType in ['apk', 'aab', 'ipa'] &&
+      data.createdAt is timestamp &&
+      isOptionalString(data, 'downloaderId', 128);
+    }
+
+    function isValidAnnouncement(data) {
+      return data.keys().hasAll(['announcementId', 'title', 'body', 'severity', 'authorId', 'active', 'createdAt']) &&
+      data.keys().hasOnly(['announcementId', 'title', 'body', 'severity', 'authorId', 'active', 'createdAt']) &&
+      isValidId(data.announcementId) &&
+      data.title is string && data.title.size() >= 2 && data.title.size() <= 140 &&
+      data.body is string && data.body.size() >= 4 && data.body.size() <= 1500 &&
+      data.severity in ['INFO', 'UPDATE', 'WARNING'] &&
+      isValidId(data.authorId) &&
+      data.active is bool &&
+      data.createdAt is timestamp;
+    }
+
+    function isValidAdminSettings(data) {
+      return data.keys().hasAll([
+        'settingId', 'maxApkSizeMb', 'maxAabSizeMb', 'maxIpaSizeMb',
+        'maxIconSizeMb', 'maxScreenshotSizeMb', 'maxAppsPerUser',
+        'requireEmailVerification', 'allowGuestDownloads', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'settingId', 'maxApkSizeMb', 'maxAabSizeMb', 'maxIpaSizeMb',
+        'maxIconSizeMb', 'maxScreenshotSizeMb', 'maxAppsPerUser',
+        'requireEmailVerification', 'allowGuestDownloads', 'updatedAt', 'updatedBy'
+      ]) &&
+      isValidId(data.settingId) &&
+      data.maxApkSizeMb is number && data.maxApkSizeMb >= 1 && data.maxApkSizeMb <= 500 &&
+      data.maxAabSizeMb is number && data.maxAabSizeMb >= 1 && data.maxAabSizeMb <= 500 &&
+      data.maxIpaSizeMb is number && data.maxIpaSizeMb >= 1 && data.maxIpaSizeMb <= 500 &&
+      data.maxIconSizeMb is number && data.maxIconSizeMb >= 1 && data.maxIconSizeMb <= 20 &&
+      data.maxScreenshotSizeMb is number && data.maxScreenshotSizeMb >= 1 && data.maxScreenshotSizeMb <= 20 &&
+      data.maxAppsPerUser is number && data.maxAppsPerUser >= 1 && data.maxAppsPerUser <= 100 &&
+      data.requireEmailVerification is bool &&
+      data.allowGuestDownloads is bool &&
+      data.updatedAt is timestamp &&
+      isOptionalString(data, 'updatedBy', 128);
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['logId', 'actorId', 'action', 'targetType', 'targetId', 'details', 'createdAt']) &&
+      data.keys().hasOnly(['logId', 'actorId', 'actorEmail', 'action', 'targetType', 'targetId', 'details', 'createdAt']) &&
+      isValidId(data.logId) &&
+      isValidId(data.actorId) &&
+      data.action is string && data.action.size() >= 2 && data.action.size() <= 80 &&
+      data.targetType is string && data.targetType.size() >= 2 && data.targetType.size() <= 60 &&
+      data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 128 &&
+      data.details is string && data.details.size() <= 1000 &&
+      data.createdAt is timestamp &&
+      isOptionalString(data, 'actorEmail', 160);
+    }
+
+    function isValidDeletionRequest(data) {
+      return data.keys().hasAll(['requestId', 'appId', 'appName', 'developerId', 'reason', 'status', 'createdAt']) &&
+      data.keys().hasOnly(['requestId', 'appId', 'appName', 'developerId', 'reason', 'status', 'createdAt', 'resolvedAt']) &&
+      isValidId(data.requestId) &&
+      isValidId(data.appId) &&
+      data.appName is string && data.appName.size() >= 1 && data.appName.size() <= 80 &&
+      isValidId(data.developerId) &&
+      data.reason is string && data.reason.size() >= 4 && data.reason.size() <= 600 &&
+      data.status in ['PENDING', 'COMPLETED', 'DECLINED'] &&
+      data.createdAt is timestamp &&
+      isOptionalTimestamp(data, 'resolvedAt');
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection Rules
+    // -------------------------------------------------------------------------
+
+    // 1. Private User Accounts
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isSignedIn() &&
+        isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUserAccount(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        incoming().role == 'USER' &&
+        incoming().accountStatus == 'ACTIVE' &&
+        incoming().uploadedCount == 0 &&
+        incoming().registrationDate == request.time &&
+        incoming().lastActivity == request.time;
+
+      allow update: if isSignedIn() &&
+        isValidId(userId) &&
+        isValidUserAccount(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().registrationDate == existing().registrationDate && (
+          isAdmin() || (
+            isOwner(userId) &&
+            incoming().role == existing().role &&
+            incoming().accountStatus == existing().accountStatus &&
+            incoming().email == existing().email && (
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'username', 'displayName', 'avatarUrl', 'developerBio', 'supportEmail', 'website', 'lastActivity'
+              ]) ||
+              (
+                incoming().diff(existing()).affectedKeys().hasOnly(['uploadedCount', 'lastActivity']) &&
+                incoming().uploadedCount == existing().uploadedCount + 1
+              )
+            ) &&
+            incoming().lastActivity == request.time
+          )
+        );
+
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // 2. Public Developer Profiles
+    match /developers/{userId} {
+      allow get: if isValidId(userId);
+      allow list: if true;
+
+      allow create: if isSignedIn() &&
+        isValidId(userId) &&
+        isOwner(userId) &&
+        isValidPublicDeveloper(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        incoming().approvedAppCount == 0 &&
+        incoming().accountStatus == 'ACTIVE' &&
+        incoming().createdAt == request.time;
+
+      allow update: if isSignedIn() &&
+        isValidId(userId) &&
+        isValidPublicDeveloper(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt && (
+          isAdmin() || (
+            isOwner(userId) &&
+            incoming().approvedAppCount == existing().approvedAppCount &&
+            incoming().accountStatus == existing().accountStatus &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['username', 'displayName', 'bio', 'avatarUrl', 'website'])
+          )
+        );
+
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // 3. Admins
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create, update, delete: if isValidId(userId) && isAdmin() && (request.method == 'delete' || isValidAdminMarker(incoming()));
+    }
+
+    // 4. Applications
+    match /applications/{appId} {
+      allow get: if isValidId(appId) && (
+        existing().status == 'APPROVED' ||
+        (isSignedIn() && (existing().developerId == request.auth.uid || isAdmin()))
+      );
+
+      allow list: if (
+        resource.data.status == 'APPROVED' ||
+        (isSignedIn() && (resource.data.developerId == request.auth.uid || isAdmin()))
+      );
+
+      allow create: if isVerified() &&
+        isValidId(appId) &&
+        isValidApplication(incoming()) &&
+        isActiveAccount() &&
+        incoming().appId == appId &&
+        incoming().developerId == request.auth.uid &&
+        incoming().status == 'PENDING' &&
+        incoming().downloadCount == 0 &&
+        incoming().featured == false &&
+        incoming().uploadDate == request.time &&
+        incoming().updatedAt == request.time &&
+        !( 'publicDownloadUrl' in incoming() && incoming().publicDownloadUrl != '' ) &&
+        !( 'reviewerId' in incoming() ) &&
+        !( 'reviewDate' in incoming() );
+
+      allow update: if isValidId(appId) &&
+        isValidApplication(incoming()) &&
+        incoming().appId == existing().appId &&
+        incoming().developerId == existing().developerId &&
+        incoming().uploadDate == existing().uploadDate && (
+          (
+            isAdmin() &&
+            incoming().updatedAt == request.time
+          ) ||
+          (
+            isVerified() &&
+            isActiveAccount() &&
+            existing().developerId == request.auth.uid &&
+            existing().status != 'SUSPENDED' &&
+            incoming().downloadCount == existing().downloadCount &&
+            incoming().featured == existing().featured &&
+            incoming().updatedAt == request.time &&
+            (
+              (
+                incoming().status == existing().status &&
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'appName', 'description', 'category', 'isGame', 'version',
+                  'privacyPolicyUrl', 'supportContact', 'iconUrl', 'iconStoragePath',
+                  'screenshots', 'updatedAt'
+                ])
+              ) ||
+              (
+                existing().status == 'REJECTED' &&
+                incoming().status == 'PENDING' &&
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'appName', 'description', 'category', 'isGame', 'version',
+                  'fileName', 'fileSizeBytes', 'fileSha256', 'fileStoragePath',
+                  'packageInspection', 'privacyPolicyUrl', 'supportContact',
+                  'iconUrl', 'iconStoragePath', 'screenshots', 'status', 'updatedAt'
+                ])
+              )
+            )
+          ) ||
+          (
+            existing().status == 'APPROVED' &&
+            incoming().status == 'APPROVED' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['downloadCount']) &&
+            incoming().downloadCount == existing().downloadCount + 1
+          ) ||
+          (
+            isVerified() &&
+            existing().status == 'APPROVED' &&
+            incoming().status == 'APPROVED' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['averageRating', 'ratingCount']) &&
+            (
+              (!('ratingCount' in existing()) && incoming().ratingCount == 1) ||
+              ('ratingCount' in existing() && incoming().ratingCount == existing().ratingCount + 1)
+            )
+          )
+        );
+
+      allow delete: if isValidId(appId) && (
+        isAdmin() || (
+          isVerified() &&
+          existing().developerId == request.auth.uid &&
+          existing().status in ['PENDING', 'REJECTED']
+        )
+      );
+    }
+
+    // 5. Categories
+    match /categories/{categoryId} {
+      allow get: if isValidId(categoryId);
+      allow list: if true;
+      allow create, update: if isValidId(categoryId) && isAdmin() && isValidCategory(incoming());
+      allow delete: if isValidId(categoryId) && isAdmin();
+    }
+
+    // 6. Notifications
+    match /notifications/{notificationId} {
+      allow get: if isValidId(notificationId) && isSignedIn() && (
+        existing().recipientId == request.auth.uid ||
+        (existing().recipientId == 'OWNER' && isAdmin())
+      );
+
+      allow list: if isSignedIn() && (
+        resource.data.recipientId == request.auth.uid ||
+        (resource.data.recipientId == 'OWNER' && isAdmin())
+      );
+
+      allow create: if isVerified() &&
+        isValidId(notificationId) &&
+        isValidNotification(incoming()) &&
+        incoming().notificationId == notificationId &&
+        incoming().createdAt == request.time &&
+        incoming().read == false && (
+          isAdmin() ||
+          (
+            incoming().senderId == request.auth.uid &&
+            incoming().recipientId in ['OWNER', request.auth.uid]
+          )
+        );
+
+      allow update: if isSignedIn() &&
+        isValidId(notificationId) &&
+        isValidNotification(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['read']) &&
+        incoming().read == true && (
+          existing().recipientId == request.auth.uid ||
+          (existing().recipientId == 'OWNER' && isAdmin())
+        );
+
+      allow delete: if isValidId(notificationId) && isAdmin();
+    }
+
+    // 7. Reports
+    match /reports/{reportId} {
+      allow get: if isValidId(reportId) && isSignedIn() && (isAdmin() || existing().reporterId == request.auth.uid);
+      allow list: if isSignedIn() && (isAdmin() || resource.data.reporterId == request.auth.uid);
+
+      allow create: if isVerified() &&
+        isValidId(reportId) &&
+        isValidReport(incoming()) &&
+        incoming().reportId == reportId &&
+        incoming().reporterId == request.auth.uid &&
+        incoming().status == 'OPEN' &&
+        incoming().createdAt == request.time &&
+        exists(/databases/$(database)/documents/applications/$(incoming().appId));
+
+      allow update: if isValidId(reportId) &&
+        isAdmin() &&
+        isValidReport(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'resolutionNotes']);
+
+      allow delete: if isValidId(reportId) && isAdmin();
+    }
+
+    // 8. Reviews
+    match /reviews/{reviewId} {
+      allow get: if isValidId(reviewId) && (
+        existing().reviewType == 'USER_REVIEW' ||
+        isAdmin()
+      );
+      allow list: if (
+        resource.data.reviewType == 'USER_REVIEW' ||
+        isAdmin()
+      );
+
+      allow create: if isVerified() &&
+        isValidId(reviewId) &&
+        isValidReview(incoming()) &&
+        incoming().reviewId == reviewId &&
+        incoming().authorId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        exists(/databases/$(database)/documents/applications/$(incoming().appId)) && (
+          isAdmin() || (
+            incoming().reviewType == 'USER_REVIEW' &&
+            get(/databases/$(database)/documents/applications/$(incoming().appId)).data.status == 'APPROVED'
+          )
+        );
+
+      allow update: if isValidId(reviewId) && isAdmin() && isValidReview(incoming());
+      allow delete: if isValidId(reviewId) && isAdmin();
+    }
+
+    // 9. Downloads Telemetry
+    match /downloads/{downloadId} {
+      allow get: if isValidId(downloadId) && isSignedIn() && (isAdmin() || existing().downloaderId == request.auth.uid);
+      allow list: if isSignedIn() && (isAdmin() || resource.data.downloaderId == request.auth.uid);
+
+      allow create: if isValidId(downloadId) &&
+        isValidDownloadEvent(incoming()) &&
+        incoming().downloadId == downloadId &&
+        incoming().createdAt == request.time &&
+        exists(/databases/$(database)/documents/applications/$(incoming().appId)) &&
+        get(/databases/$(database)/documents/applications/$(incoming().appId)).data.status == 'APPROVED';
+
+      allow update, delete: if false;
+    }
+
+    // 10. Announcements
+    match /announcements/{announcementId} {
+      allow get: if isValidId(announcementId);
+      allow list: if true;
+      allow create: if isValidId(announcementId) && isAdmin() && isValidAnnouncement(incoming()) && incoming().createdAt == request.time;
+      allow update: if isValidId(announcementId) && isAdmin() && isValidAnnouncement(incoming());
+      allow delete: if isValidId(announcementId) && isAdmin();
+    }
+
+    // 11. Admin Settings
+    match /adminSettings/{settingId} {
+      allow get: if isValidId(settingId);
+      allow list: if true;
+      allow create, update: if isValidId(settingId) && isAdmin() && isValidAdminSettings(incoming()) && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // 12. Audit Logs (Strictly Immutable)
+    match /auditLogs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isVerified() &&
+        isValidId(logId) &&
+        isValidAuditLog(incoming()) &&
+        incoming().logId == logId &&
+        incoming().actorId == request.auth.uid &&
+        incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // 13. Deletion Requests
+    match /deletionRequests/{requestId} {
+      allow get: if isValidId(requestId) && isSignedIn() && (isAdmin() || existing().developerId == request.auth.uid);
+      allow list: if isSignedIn() && (isAdmin() || resource.data.developerId == request.auth.uid);
+
+      allow create: if isVerified() &&
+        isValidId(requestId) &&
+        isValidDeletionRequest(incoming()) &&
+        incoming().requestId == requestId &&
+        incoming().developerId == request.auth.uid &&
+        incoming().status == 'PENDING' &&
+        incoming().createdAt == request.time &&
+        exists(/databases/$(database)/documents/applications/$(incoming().appId)) &&
+        get(/databases/$(database)/documents/applications/$(incoming().appId)).data.developerId == request.auth.uid;
+
+      allow update: if isValidId(requestId) &&
+        isAdmin() &&
+        isValidDeletionRequest(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'resolvedAt']);
+
+      allow delete: if isValidId(requestId) && isAdmin();
+    }
+  }
+}
