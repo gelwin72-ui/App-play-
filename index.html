@@ -35,20 +35,31 @@
           return;
         }
         window.__APPVERSE_STATIC_BOOTING__ = true;
-        var css = document.createElement('link');
-        css.rel = 'stylesheet';
-        css.href = './gh-pages/appverse.css';
-        document.head.appendChild(css);
-        var s = document.createElement('script');
-        s.type = 'module';
-        s.src = './gh-pages/appverse.js';
-        s.onerror = function () {
-          var msg = document.getElementById('appverse-boot-msg');
-          if (msg) {
-            msg.innerHTML = 'Unable to load APPVERSE assets. Ensure the <code>gh-pages</code> folder is included in your repository or set <strong>Settings → Pages → Source</strong> to <strong>GitHub Actions</strong>.';
-          }
+        var startLoad = function (ver) {
+          var q = '?v=' + encodeURIComponent(ver || String(Date.now()));
+          var css = document.createElement('link');
+          css.rel = 'stylesheet';
+          css.href = './gh-pages/appverse.css' + q;
+          document.head.appendChild(css);
+          var s = document.createElement('script');
+          s.type = 'module';
+          s.src = './gh-pages/appverse.js' + q;
+          s.onerror = function () {
+            var msg = document.getElementById('appverse-boot-msg');
+            if (msg) {
+              msg.innerHTML = 'Unable to load APPVERSE assets. Ensure the <code>gh-pages</code> folder is included in your repository or set <strong>Settings → Pages → Source</strong> to <strong>GitHub Actions</strong>.';
+            }
+          };
+          document.body.appendChild(s);
         };
-        document.body.appendChild(s);
+        if (typeof fetch === 'function') {
+          fetch('./gh-pages/version.json?t=' + Date.now(), { cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) { startLoad(d && d.version); })
+            .catch(function () { startLoad(String(Date.now())); });
+        } else {
+          startLoad(String(Date.now()));
+        }
       };
       if (!window.__APPVERSE_VITE_RUNTIME__) {
         window.__loadStaticAppverse();

@@ -35,11 +35,15 @@ export default defineConfig(() => {
           if (fs.existsSync(distDir) && fs.existsSync(srcAssets)) {
             fs.cpSync(srcAssets, distAssets, {recursive: true, force: true});
           }
-          // Create 404.html fallback for GitHub Pages SPA deep links
+          // Create 404.html and .nojekyll for GitHub Pages
           const distIndex = path.resolve(distDir, 'index.html');
           const dist404 = path.resolve(distDir, '404.html');
           if (fs.existsSync(distIndex)) {
             fs.copyFileSync(distIndex, dist404);
+          }
+          const rootNojekyll = path.resolve(rootDir, '.nojekyll');
+          if (fs.existsSync(rootNojekyll) && fs.existsSync(distDir)) {
+            fs.copyFileSync(rootNojekyll, path.join(distDir, '.nojekyll'));
           }
           // Sync static pre-built bundle into /gh-pages/ for branch-based GitHub Pages deployments
           if (process.env.GITHUB_ACTIONS !== 'true') {
@@ -61,6 +65,11 @@ export default defineConfig(() => {
                   fs.copyFileSync(srcFile, path.join(ghPagesDir, entry));
                 }
               }
+              fs.writeFileSync(
+                path.join(ghPagesDir, 'version.json'),
+                JSON.stringify({version: String(Date.now())}),
+                'utf8',
+              );
             }
           }
         },

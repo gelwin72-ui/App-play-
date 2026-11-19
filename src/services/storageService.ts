@@ -76,6 +76,14 @@ export async function uploadAppBinary(params: {
       throw err;
     }
 
+    const isStaticHost =
+      typeof window !== 'undefined' && window.location.hostname.endsWith('github.io');
+    if (isStaticHost) {
+      throw new Error(
+        'Firebase Storage is required to upload APK/AAB/IPA binaries from GitHub Pages. Enable Firebase Storage for your project in Firebase Console.'
+      );
+    }
+
     onProgress({
       percent: 15,
       bytesTransferred: 0,
