@@ -45,33 +45,6 @@ export default defineConfig(() => {
           if (fs.existsSync(rootNojekyll) && fs.existsSync(distDir)) {
             fs.copyFileSync(rootNojekyll, path.join(distDir, '.nojekyll'));
           }
-          // Sync static pre-built bundle into /gh-pages/ for branch-based GitHub Pages deployments
-          if (process.env.GITHUB_ACTIONS !== 'true') {
-            const distBuiltAssets = path.resolve(distDir, 'assets');
-            const ghPagesDir = path.resolve(rootDir, 'gh-pages');
-            if (fs.existsSync(distBuiltAssets)) {
-              fs.rmSync(ghPagesDir, {recursive: true, force: true});
-              fs.mkdirSync(ghPagesDir, {recursive: true});
-              for (const entry of fs.readdirSync(distBuiltAssets)) {
-                const srcFile = path.join(distBuiltAssets, entry);
-                if (!fs.statSync(srcFile).isFile()) {
-                  continue;
-                }
-                if (entry.startsWith('index-') && entry.endsWith('.js')) {
-                  fs.copyFileSync(srcFile, path.join(ghPagesDir, 'appverse.js'));
-                } else if (entry.startsWith('index-') && entry.endsWith('.css')) {
-                  fs.copyFileSync(srcFile, path.join(ghPagesDir, 'appverse.css'));
-                } else {
-                  fs.copyFileSync(srcFile, path.join(ghPagesDir, entry));
-                }
-              }
-              fs.writeFileSync(
-                path.join(ghPagesDir, 'version.json'),
-                JSON.stringify({version: String(Date.now())}),
-                'utf8',
-              );
-            }
-          }
         },
       },
     ],

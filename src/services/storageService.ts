@@ -200,6 +200,13 @@ export async function resolveApprovedPackageDownloadUrl(params: {
     return publicDownloadUrl;
   }
   if (fileStoragePath.startsWith('vault/')) {
+    const isStaticHost =
+      typeof window !== 'undefined' && window.location.hostname.endsWith('github.io');
+    if (isStaticHost) {
+      throw new Error(
+        'This package is stored in the APPVERSE Express Vault, which is not available on static GitHub Pages. Open the live APPVERSE server or re-upload using Firebase Storage.'
+      );
+    }
     return `/api/storage/download/${encodeURIComponent(appId)}`;
   }
   const storageRef = ref(storage, fileStoragePath);
@@ -214,6 +221,13 @@ export async function downloadPackageForOwnerReview(params: {
   const { appId, fileStoragePath, fileName } = params;
 
   if (fileStoragePath.startsWith('vault/')) {
+    const isStaticHost =
+      typeof window !== 'undefined' && window.location.hostname.endsWith('github.io');
+    if (isStaticHost) {
+      throw new Error(
+        'This package is stored in the APPVERSE Express Vault, which is not available on static GitHub Pages. Open the live APPVERSE server or re-upload using Firebase Storage.'
+      );
+    }
     const token = await auth.currentUser?.getIdToken();
     const resp = await fetch(`/api/storage/download/${encodeURIComponent(appId)}?ownerReview=1`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
