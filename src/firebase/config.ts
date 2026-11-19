@@ -1,8 +1,8 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
+import { initializeAppCheck, ReCaptchaV3Provider, type AppCheck } from 'firebase/app-check';
 import { getMessaging, isSupported as isMessagingSupported, getToken } from 'firebase/messaging';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -10,24 +10,43 @@ export const OWNER_EMAIL = (import.meta.env.VITE_OWNER_EMAIL as string | undefin
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+function createFirestoreClient() {
+  try {
+    const settings =
+      typeof window !== 'undefined'
+        ? { experimentalForceLongPolling: true }
+        : {};
+    return initializeFirestore(app, settings, firebaseConfig.firestoreDatabaseId);
+  } catch {
+    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  }
+}
+
+export const db = createFirestoreClient();
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
-// Optional Firebase App Check initialization if site key is configured
+// Optional Firebase App Check initialization only when explicitly configured for this project
 const recaptchaSiteKey =
-  (import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined) ||
-  (firebaseConfig as { recaptchaSiteKey?: string }).recaptchaSiteKey ||
-  '';
+  (firebaseConfig as { recaptchaSiteKey?: string }).recaptchaSiteKey?.trim() || '';
 
-export let appCheckActive = false;
-if (typeof window !== 'undefined' && recaptchaSiteKey) {
+const globalForAppCheck = globalThis as typeof globalThis & {
+  __APPVERSE_APP_CHECK__?: AppCheck;
+};
+
+export let appCheckActive = Boolean(globalForAppCheck.__APPVERSE_APP_CHECK__);
+if (typeof window !== 'undefined' && recaptchaSiteKey && !globalForAppCheck.__APPVERSE_APP_CHECK__) {
   try {
-    initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(recaptchaSiteKey),
-      isTokenAutoRefreshEnabled: true,
-    });
-    appCheckActive = true;
+    const existingRecaptchaContainer = document.getElementById(`fire_app_check_${app.name}`);
+    if (existingRecaptchaContainer && existingRecaptchaContainer.childElementCount > 0) {
+      appCheckActive = true;
+    } else {
+      globalForAppCheck.__APPVERSE_APP_CHECK__ = initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(recaptchaSiteKey),
+        isTokenAutoRefreshEnabled: true,
+      });
+      appCheckActive = true;
+    }
   } catch (err) {
     console.warn('App Check initialization skipped:', err);
   }

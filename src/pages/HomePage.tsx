@@ -39,7 +39,13 @@ export function HomePage({
   isSignedIn,
 }: HomePageProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [showGuide, setShowGuide] = useState(() => localStorage.getItem('appverse_guide_dismissed') !== '1');
+  const [showGuide, setShowGuide] = useState(() => {
+    try {
+      return localStorage.getItem('appverse_guide_dismissed') !== '1';
+    } catch {
+      return true;
+    }
+  });
 
   const featuredApps = useMemo(
     () => approvedApps.filter((a) => a.featured).slice(0, 6),
@@ -219,7 +225,11 @@ export function HomePage({
             <button
               type="button"
               onClick={() => {
-                localStorage.setItem('appverse_guide_dismissed', '1');
+                try {
+                  localStorage.setItem('appverse_guide_dismissed', '1');
+                } catch {
+                  // Ignore storage restrictions
+                }
                 setShowGuide(false);
               }}
               className="text-xs font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white whitespace-nowrap self-start md:self-center"

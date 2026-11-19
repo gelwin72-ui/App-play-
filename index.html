@@ -18,19 +18,41 @@
       <div id="appverse-boot-shell" style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;font-family:'Plus Jakarta Sans',system-ui,sans-serif;text-align:center;">
         <div style="width:56px;height:56px;border-radius:16px;background:#0f172a;color:#ffffff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px;margin-bottom:16px;">A</div>
         <h1 style="margin:0;font-size:22px;font-weight:700;color:#0f172a;">APPVERSE</h1>
-        <p id="appverse-boot-msg" style="margin:8px 0 0;font-size:13px;color:#64748b;max-width:440px;line-height:1.5;">Loading application marketplace...</p>
+        <p id="appverse-boot-msg" style="margin:8px 0 0;font-size:13px;color:#64748b;max-width:440px;line-height:1.5;">Loading APPVERSE marketplace...</p>
       </div>
     </div>
     <script>
+      window.__APPVERSE_VITE_RUNTIME__ = false;
+      /*__VITE_RUNTIME__*/
       window.__APPVERSE_MOUNTED__ = false;
-      setTimeout(function () {
-        if (!window.__APPVERSE_MOUNTED__) {
+      window.__APPVERSE_STATIC_BOOTING__ = false;
+      window.__loadStaticAppverse = function () {
+        if (
+          window.__APPVERSE_VITE_RUNTIME__ ||
+          window.__APPVERSE_MOUNTED__ ||
+          window.__APPVERSE_STATIC_BOOTING__
+        ) {
+          return;
+        }
+        window.__APPVERSE_STATIC_BOOTING__ = true;
+        var css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = './gh-pages/appverse.css';
+        document.head.appendChild(css);
+        var s = document.createElement('script');
+        s.type = 'module';
+        s.src = './gh-pages/appverse.js';
+        s.onerror = function () {
           var msg = document.getElementById('appverse-boot-msg');
           if (msg) {
-            msg.innerHTML = 'If you published raw source files to GitHub Pages, switch <strong>Settings → Pages → Source</strong> to <strong>GitHub Actions</strong> so the included workflow builds and serves the live interface.';
+            msg.innerHTML = 'Unable to load APPVERSE assets. Ensure the <code>gh-pages</code> folder is included in your repository or set <strong>Settings → Pages → Source</strong> to <strong>GitHub Actions</strong>.';
           }
-        }
-      }, 3500);
+        };
+        document.body.appendChild(s);
+      };
+      if (!window.__APPVERSE_VITE_RUNTIME__) {
+        window.__loadStaticAppverse();
+      }
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

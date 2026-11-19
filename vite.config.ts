@@ -11,6 +11,15 @@ export default defineConfig(() => {
     // Relative base ensures assets resolve cleanly on GitHub Pages subpaths (/repo-name/) and root domains
     base: './',
     plugins: [
+      {
+        name: 'mark-vite-runtime',
+        transformIndexHtml(html: string) {
+          return html.replace(
+            '/*__VITE_RUNTIME__*/',
+            'window.__APPVERSE_VITE_RUNTIME__ = true;',
+          );
+        },
+      },
       react(),
       tailwindcss(),
       {
@@ -31,6 +40,28 @@ export default defineConfig(() => {
           const dist404 = path.resolve(distDir, '404.html');
           if (fs.existsSync(distIndex)) {
             fs.copyFileSync(distIndex, dist404);
+          }
+          // Sync static pre-built bundle into /gh-pages/ for branch-based GitHub Pages deployments
+          if (process.env.GITHUB_ACTIONS !== 'true') {
+            const distBuiltAssets = path.resolve(distDir, 'assets');
+            const ghPagesDir = path.resolve(rootDir, 'gh-pages');
+            if (fs.existsSync(distBuiltAssets)) {
+              fs.rmSync(ghPagesDir, {recursive: true, force: true});
+              fs.mkdirSync(ghPagesDir, {recursive: true});
+              for (const entry of fs.readdirSync(distBuiltAssets)) {
+                const srcFile = path.join(distBuiltAssets, entry);
+                if (!fs.statSync(srcFile).isFile()) {
+                  continue;
+                }
+                if (entry.startsWith('index-') && entry.endsWith('.js')) {
+                  fs.copyFileSync(srcFile, path.join(ghPagesDir, 'appverse.js'));
+                } else if (entry.startsWith('index-') && entry.endsWith('.css')) {
+                  fs.copyFileSync(srcFile, path.join(ghPagesDir, 'appverse.css'));
+                } else {
+                  fs.copyFileSync(srcFile, path.join(ghPagesDir, entry));
+                }
+              }
+            }
           }
         },
       },

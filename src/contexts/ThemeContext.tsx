@@ -21,15 +21,33 @@ export const LANGUAGE_LABELS: Record<LanguageCode, string> = {
   hi: 'हिन्दी',
 };
 
+function safeStorageGet(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeStorageSet(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore restricted storage contexts
+  }
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<ThemeMode>(() => {
-    const saved = localStorage.getItem('appverse_theme');
+    const saved = safeStorageGet('appverse_theme');
     if (saved === 'light' || saved === 'dark') return saved;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    return typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light';
   });
 
   const [language, setLanguageState] = useState<LanguageCode>(() => {
-    const saved = localStorage.getItem('appverse_lang') as LanguageCode | null;
+    const saved = safeStorageGet('appverse_lang') as LanguageCode | null;
     return saved && saved in LANGUAGE_LABELS ? saved : 'en';
   });
 
@@ -40,7 +58,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       root.classList.remove('dark');
     }
-    localStorage.setItem('appverse_theme', theme);
+    safeStorageSet('appverse_theme', theme);
   }, [theme]);
 
   const setTheme = (mode: ThemeMode) => setThemeState(mode);
@@ -48,7 +66,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const setLanguage = (lang: LanguageCode) => {
     setLanguageState(lang);
-    localStorage.setItem('appverse_lang', lang);
+    safeStorageSet('appverse_lang', lang);
   };
 
   return (
